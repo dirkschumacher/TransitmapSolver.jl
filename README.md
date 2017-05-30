@@ -1,7 +1,7 @@
 # TransitmapSolver
 
 This is a work in progress implementation of a solver that can generate
-simplified transitmaps. It currently (tries) to implement the model proposed by Nollenburg & Wolff (2011). It also draws from the thesis of Nollenburg (2009).
+simplified transitmaps. It currently (tries) to implement the model proposed by Nollenburg & Wolff (2011). It also draws from the thesis of Nollenburg (2005).
 
 ## References
 
