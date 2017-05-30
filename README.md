@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/dirkschumacher/TransitmapSolver.jl.svg?branch=master)](https://travis-ci.org/dirkschumacher/TransitmapSolver.jl)
+[![Build status](https://ci.appveyor.com/api/projects/status/mcnjxvve5do10sce/branch/master?svg=true)](https://ci.appveyor.com/project/dirkschumacher/transitmapsolver-jl/branch/master)
+
 # TransitmapSolver
 
 This is a work in progress implementation of a solver that can generate
