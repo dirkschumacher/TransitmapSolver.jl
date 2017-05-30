@@ -1,5 +1,6 @@
 [![Build Status](https://travis-ci.org/dirkschumacher/TransitmapSolver.jl.svg?branch=master)](https://travis-ci.org/dirkschumacher/TransitmapSolver.jl)
 [![Build status](https://ci.appveyor.com/api/projects/status/mcnjxvve5do10sce/branch/master?svg=true)](https://ci.appveyor.com/project/dirkschumacher/transitmapsolver-jl/branch/master)
+[![Project Status: WIP – Initial development is in progress, but there has not yet been a stable, usable release suitable for the public.](http://www.repostatus.org/badges/latest/wip.svg)](http://www.repostatus.org/#wip)
 
 # TransitmapSolver
 
