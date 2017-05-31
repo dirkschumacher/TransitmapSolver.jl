@@ -3,9 +3,10 @@ language: julia
 os:
   - linux
   - osx
+
 julia:
   - 0.5
- # - nightly
+  - nightly
 notifications:
   email: false
 git:
@@ -17,19 +18,14 @@ git:
 #  allow_failures:
 #  - julia: nightly
 
-## uncomment and modify the following lines to manually install system packages
-#addons:
-#  apt: # apt-get for linux
-#    packages:
-#    - gfortran
-#before_script: # homebrew for mac
-#  - if [ $TRAVIS_OS_NAME = osx ]; then brew install gcc; fi
+addons:
+  apt: # apt-get for linux
+    packages:
+    - libglpk-dev
 
-## uncomment the following lines to override the default test script
-#script:
-#  - julia -e 'Pkg.clone(pwd()); Pkg.build("TransitmapSolver"); Pkg.test("TransitmapSolver"; coverage=true)'
+before_script: # homebrew for mac
+  - if [ $TRAVIS_OS_NAME = osx ]; then brew install glpk; fi
+
 after_success:
-  # push coverage results to Coveralls
-  - julia -e 'cd(Pkg.dir("TransitmapSolver")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
   # push coverage results to Codecov
   - julia -e 'cd(Pkg.dir("TransitmapSolver")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
