@@ -19,7 +19,7 @@ matrix:
 addons:
   apt: # apt-get for linux
     packages:
-    - libglpk-dev
+    - libgmp3-dev
 
 before_script: # homebrew for mac
   - if [ $TRAVIS_OS_NAME = osx ]; then brew install homebrew/science/glpk; fi
