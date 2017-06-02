@@ -1,4 +1,5 @@
-function optimize(solver, transit_map::InputGraph, planarity_constraints = true)
+function optimize(solver::MathProgBase.SolverInterface.AbstractMathProgSolver,
+                    transit_map::InputGraph, planarity_constraints::Bool)
     input_graph = transit_map
     station_list = stations(input_graph)
     edge_list = edges(input_graph)

@@ -34,7 +34,7 @@ transit_map = InputGraph([station1, station2, station3, station4, station5,
 #   x   |   x
 # 6     5    8
 
-result = optimize(GLPKSolverMIP(msg_lev = 3), transit_map)
+result = optimize(GLPKSolverMIP(msg_lev = 3), transit_map, false)
 
 @test result.stations[1].coordinate.y ≈ result.stations[2].coordinate.y
 @test result.stations[2].coordinate.y ≈ result.stations[3].coordinate.y

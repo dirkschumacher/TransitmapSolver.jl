@@ -14,7 +14,7 @@ macro check_pairs(vals, a, b, c, d)
     $vals[$b] - $vals[$d] <= -d_min))
 end
 
-function build_model!(model, transit_map::InputGraph, planarity_constraints = true)
+function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_constraints = true)
 
     # model parameters
     station_list = stations(transit_map)
