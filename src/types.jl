@@ -14,8 +14,8 @@ type GeoCoordinate <: Coordinate
 end
 
 type EuclideanCoordinate <: Coordinate
-    x::Float64
-    y::Float64
+    x::Integer
+    y::Integer
 end
 
 typealias GeoStation Station{GeoCoordinate}
