@@ -17,15 +17,15 @@ end
 function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_constraints = true)
 
     # model parameters
-    station_list = stations(transit_map)
-    edge_list = edges(transit_map)
-    N = nstations(transit_map)
-    M = nedges(transit_map)
-    d_min = 1
+    const station_list = stations(transit_map)
+    const edge_list = edges(transit_map)
+    const N = nstations(transit_map)
+    const M = nedges(transit_map)
+    const d_min = 1
     # max canvas should be as small as possible for bigM formulation
-    max_canvas = sum(map(x -> x.min_length, edge_list))
-    get_degree = x -> out_degree(transit_map, x)
-    max_degree = maximum(map(get_degree, station_list))
+    const max_canvas = sum(map(x -> x.min_length, edge_list))
+    const get_degree = x -> out_degree(transit_map, x)
+    const max_degree = maximum(map(get_degree, station_list))
 
     # now we need a mapping from a station id to a number from 1:N
     # the same is needed is needed for edges
@@ -42,20 +42,9 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
         -1
     end
 
-    function get_edge_index(edge_id)
-        p = 1
-        for i in 1:M
-            if edge_list[i].id == edge_id
-                return p
-            end
-            p = p + 1
-        end
-        -1
-    end
-
     function get_neighbors(station)
         # try only the out-degree
-        neighbors_from = map(x -> x.to.id, filter(x -> x.from == station && !x.is_single_label_edge, edge_list))
+        const neighbors_from = map(x -> x.to.id, filter(x -> x.from == station && !x.is_single_label_edge, edge_list))
         #neighbors_to = map(x -> x.from.id, filter(x -> x.to == station, edge_list))
         #setdiff(unique(vcat(neighbors_from, neighbors_to)), [station.id])
         setdiff(unique(neighbors_from), [station.id])
@@ -64,7 +53,7 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     # TODO: Is this really correct?
     function sort_node_by_direction(root_node)
         function (target_node)
-            t1 = map(x -> x.direction, filter(x -> x.from.id == root_node && x.to.id == target_node, edge_list))
+            const t1 = map(x -> x.direction, filter(x -> x.from.id == root_node && x.to.id == target_node, edge_list))
             #t2 = map(x -> x.direction, filter(x -> x.from.id == target_node && x.to.id == root_node, edge_list))
             #println(root_node, target_node, t1, ";", t2)
             #if length(t2) > 0
@@ -79,13 +68,13 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     end
 
     # We need a list of incident edges for the bend costs
-    indicent_edge_list = incident_edges(transit_map)
-    n_incident_edges = length(indicent_edge_list)
+    const indicent_edge_list = incident_edges(transit_map)
+    const n_incident_edges = length(indicent_edge_list)
 
     # also for the planarity constraints we need a list of
     # non_incident_edges edges
-    non_indicent_edge_list = non_incident_edges(transit_map)
-    n_non_incident_edges = length(non_indicent_edge_list)
+    const non_indicent_edge_list = non_incident_edges(transit_map)
+    const n_non_incident_edges = length(non_indicent_edge_list)
 
     # TODO: Only edge variables for non dummy edges / nodes
     # where sensible
@@ -100,8 +89,8 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     # the direction variables
     # only add those that are really needed
     function is_edge(i, j)
-        u = station_list[i]
-        v = station_list[j]
+        const u = station_list[i]
+        const v = station_list[j]
         length(filter(x -> x.from == u && x.to == v || x.to == u && x.from == v, edge_list)) > 0
     end
     @variable(model, 0 <= d[i = 1:N, j = 1:N; is_edge(i, j)] <= 7)
@@ -139,24 +128,24 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
         # We need to ensure that only one sector is chosen per edge
         @constraint(model, sum(a[i, s] for s = 1:3) == 1)
 
-        edge = edge_list[i]
-        min_length = edge.min_length
-        orig_dir = edge.direction
-        u = get_station_index(edge.from.id)
-        v = get_station_index(edge.to.id)
-        is_single_label_edge = edge.is_single_label_edge
-        is_standard_edge = !is_single_label_edge
+        const edge = edge_list[i]
+        const min_length = edge.min_length
+        const orig_dir = edge.direction
+        const u = get_station_index(edge.from.id)
+        const v = get_station_index(edge.to.id)
+        const is_single_label_edge = edge.is_single_label_edge
+        const is_standard_edge = !is_single_label_edge
 
         # Ensure that the direction variable has the correct value
         # This block also defines the d variables
         # as I did not figure out how to create a selective group of variables
-        prec_dir = preceding_direction(orig_dir)
-        succ_dir = (orig_dir + 1) % 8
-        orig_dir_rev = (orig_dir + 4) % 8
-        prec_dir_rev = preceding_direction(orig_dir_rev)
-        succ_dir_rev = (orig_dir_rev + 1) % 8
-        dir = [prec_dir, orig_dir, succ_dir]
-        dir_rev = [prec_dir_rev, orig_dir_rev, succ_dir_rev]
+        const prec_dir = preceding_direction(orig_dir)
+        const succ_dir = (orig_dir + 1) % 8
+        const orig_dir_rev = (orig_dir + 4) % 8
+        const prec_dir_rev = preceding_direction(orig_dir_rev)
+        const succ_dir_rev = (orig_dir_rev + 1) % 8
+        const dir = [prec_dir, orig_dir, succ_dir]
+        const dir_rev = [prec_dir_rev, orig_dir_rev, succ_dir_rev]
         if is_standard_edge
             @constraint(model, d[u, v] == prec_dir * a[i, 1] +
                 orig_dir * a[i, 2] + succ_dir * a[i, 3])
@@ -197,7 +186,7 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
             @constraint(model, d[u, v] == sum(d * ae[i, d] for d = allowed_dirs))
         end
 
-        bM = max_canvas
+        const bM = max_canvas
 
         # Todo: Extract this into a macro
         if orig_dir == 0
@@ -329,19 +318,19 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     for i in 1:N
         #continue
         # we also need to add the circular order constraints
-        station = station_list[i]
-        station_id = station.id
-        deg = out_degree(transit_map, station)
-        neighbors = get_neighbors(station)
+        const station = station_list[i]
+        const station_id = station.id
+        const deg = out_degree(transit_map, station)
+        const neighbors = get_neighbors(station)
         if deg >= 2 && length(neighbors) >= 2
             #println(i, sort(neighbors, by = sort_node_by_direction(station_id)))
-            neighbor_indexes = map(get_station_index,
+            const neighbor_indexes = map(get_station_index,
                                     sort(neighbors, by = sort_node_by_direction(station_id)))
             @constraint(model, sum(b[i, j] for j = 1:length(neighbors)) == 1)
 
             # add circle constraints
             for j in 1:length(neighbor_indexes)
-                jIdx = neighbor_indexes[j]
+                const jIdx = neighbor_indexes[j]
                 if j + 1 <= length(neighbor_indexes)
                     jIdxP = neighbor_indexes[j + 1]
                 else
@@ -355,20 +344,20 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     if planarity_constraints
         # last step is to register a callback to preserve planarity
         function check_edge_spacing(cb)
-            bM2 = max_canvas + d_min
-            x_val = getvalue(x)
-            y_val = getvalue(y)
-            z1_val = getvalue(z1)
-            z2_val = getvalue(z2)
+            const bM2 = max_canvas + d_min
+            const x_val = getvalue(x)
+            const y_val = getvalue(y)
+            const z1_val = getvalue(z1)
+            const z2_val = getvalue(z2)
             #println("Enter callback")
             for i in 1:n_non_incident_edges
-                t = non_indicent_edge_list[i]
-                e1 = t[1]
-                e2 = t[2]
-                u1 = get_station_index(e1.from.id)
-                v1 = get_station_index(e1.to.id)
-                u2 = get_station_index(e2.from.id)
-                v2 = get_station_index(e2.to.id)
+                const t = non_indicent_edge_list[i]
+                const e1 = t[1]
+                const e2 = t[2]
+                const u1 = get_station_index(e1.from.id)
+                const v1 = get_station_index(e1.to.id)
+                const u2 = get_station_index(e2.from.id)
+                const v2 = get_station_index(e2.to.id)
                 if !(@check_pairs(x_val, u1, v1, u2, v2) ||
                     @check_pairs(z1_val, u1, v1, u2, v2) ||
                     @check_pairs(y_val, u1, v1, u2, v2) ||
@@ -449,12 +438,12 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
 
     # bend cost constraints
     for i in 1:n_incident_edges
-        t = indicent_edge_list[i]
-        e1 = t[1]
-        e2 = t[2]
-        u = get_station_index(e1.from.id)
-        v = get_station_index(e1.to.id)
-        w = get_station_index(e2.to.id)
+        const t = indicent_edge_list[i]
+        const e1 = t[1]
+        const e2 = t[2]
+        const u = get_station_index(e1.from.id)
+        const v = get_station_index(e1.to.id)
+        const w = get_station_index(e2.to.id)
         @constraint(model, -1 * bc[i] <= d[u, v] - d[v, w] - 8 * bc_s1[i] + 8 * bc_s2[i])
         @constraint(model, bc[i] >= d[u, v] - d[v, w] - 8 * bc_s1[i] + 8 * bc_s2[i])
     end
