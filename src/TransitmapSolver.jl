@@ -1,5 +1,6 @@
 module TransitmapSolver
 using JuMP
+import MathProgBase
 
 include("types.jl")
 include("transitmap.jl")
