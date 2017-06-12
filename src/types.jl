@@ -14,8 +14,8 @@ type GeoCoordinate <: Coordinate
 end
 
 type EuclideanCoordinate <: Coordinate
-    x::Integer
-    y::Integer
+    x::Real
+    y::Real
 end
 
 typealias GeoStation Station{GeoCoordinate}
@@ -34,6 +34,7 @@ type Edge{TS} <: GenericEdge{TS}
 end
 
 typealias GeoEdge Edge{GeoStation}
+typealias EuclideanEdge Edge{EuclideanStation}
 
 # TODO: How to make sure that station and edges refer to the same station type?
 type TransitMap{TS<:Station, TE<:GenericEdge}
@@ -56,7 +57,7 @@ end
 
 typealias GeoTransitMap TransitMap{GeoStation, GeoEdge}
 
-typealias InputGraph TransitMap{GeoStation, ProcessedEdge{GeoStation}}
+typealias InputGraph TransitMap{EuclideanStation, ProcessedEdge{EuclideanStation}}
 
 # output
 
@@ -64,6 +65,7 @@ type TransitMapLayout
     stations::Array{EuclideanStation}
     edges::Array{Edge{EuclideanStation}}
     lines::Array{Line}
+    faces::Set{Set{ProcessedEdge{EuclideanStation}}}
 end
 
 type ModelVariables

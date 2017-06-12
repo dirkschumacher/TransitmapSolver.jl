@@ -7,14 +7,16 @@ function preceding_direction(dir::Direction)
         prec_dir
     end
 end
+
 macro check_pairs(vals, a, b, c, d)
-:(($vals[$a] - $vals[$c] <= -d_min &&
-    $vals[$a] - $vals[$d] <= -d_min &&
-    $vals[$b] - $vals[$c] <= -d_min &&
-    $vals[$b] - $vals[$d] <= -d_min))
+:((round(getvalue($vals[$a]), 2) - round(getvalue($vals[$c]), 2) <= -d_min &&
+    round(getvalue($vals[$a]), 2) - round(getvalue($vals[$d]), 2) <= -d_min &&
+    round(getvalue($vals[$b]), 2) - round(getvalue($vals[$c]), 2) <= -d_min &&
+    round(getvalue($vals[$b]), 2) - round(getvalue($vals[$d]), 2) <= -d_min))
 end
 
-function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_constraints = true)
+function build_model!(model::JuMP.Model, transit_map::InputGraph,
+                        faces::Set{Set{GenericEdge}}, planarity_constraints::Integer = 0)
 
     # model parameters
     const station_list = stations(transit_map)
@@ -23,7 +25,7 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     const M = nedges(transit_map)
     const d_min = 1
     # max canvas should be as small as possible for bigM formulation
-    const max_canvas = sum(map(x -> x.min_length, edge_list))
+    const max_canvas = sum(map(x -> x.min_length, edge_list)) * 2
     const get_degree = x -> out_degree(transit_map, x)
     const max_degree = maximum(map(get_degree, station_list))
 
@@ -45,8 +47,6 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     function get_neighbors(station)
         # try only the out-degree
         const neighbors_from = map(x -> x.to.id, filter(x -> x.from == station && !x.is_single_label_edge, edge_list))
-        #neighbors_to = map(x -> x.from.id, filter(x -> x.to == station, edge_list))
-        #setdiff(unique(vcat(neighbors_from, neighbors_to)), [station.id])
         setdiff(unique(neighbors_from), [station.id])
     end
 
@@ -54,16 +54,7 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     function sort_node_by_direction(root_node)
         function (target_node)
             const t1 = map(x -> x.direction, filter(x -> x.from.id == root_node && x.to.id == target_node, edge_list))
-            #t2 = map(x -> x.direction, filter(x -> x.from.id == target_node && x.to.id == root_node, edge_list))
-            #println(root_node, target_node, t1, ";", t2)
-            #if length(t2) > 0
-            #    (first(t2) + 4) % 8
-            #elseif length(t1) > 0
             first(t1)
-            #else
-            #    # should not happen
-            #    error("Could not find edge from ", root_node, "->", target_node, ".")
-            #end
         end
     end
 
@@ -73,7 +64,7 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
 
     # also for the planarity constraints we need a list of
     # non_incident_edges edges
-    const non_indicent_edge_list = non_incident_edges(transit_map)
+    const non_indicent_edge_list = non_incident_edges(transit_map, faces)
     const n_non_incident_edges = length(non_indicent_edge_list)
 
     # TODO: Only edge variables for non dummy edges / nodes
@@ -86,6 +77,13 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     @variable(model, 1 <= elen[1:M] <= max_canvas)
     @variable(model, 0 <= a[1:M, 1:3] <= 1, Bin)
 
+    @variable(model, 0 <= b[1:N, 1:max_degree] <= 1, Bin)
+
+    # bend cost
+    @variable(model, 0 <= bc[1:n_incident_edges] <= 7)
+    @variable(model, 0 <= bc_s1[1:n_incident_edges] <= 1, Bin)
+    @variable(model, 0 <= bc_s2[1:n_incident_edges] <= 1, Bin)
+
     # the direction variables
     # only add those that are really needed
     function is_edge(i, j)
@@ -95,18 +93,12 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
     end
     @variable(model, 0 <= d[i = 1:N, j = 1:N; is_edge(i, j)] <= 7)
 
-    @variable(model, 0 <= b[1:N, 1:max_degree] <= 1, Bin)
-
-    # bend cost
-    @variable(model, 0 <= bc[1:n_incident_edges] <= 1, Bin)
-    @variable(model, 0 <= bc_s1[1:n_incident_edges] <= 1, Bin)
-    @variable(model, 0 <= bc_s2[1:n_incident_edges] <= 1, Bin)
 
     # relative postions
     @variable(model, 0 <= rpos[1:M] <= 1, Bin)
 
     # planarity
-    if planarity_constraints
+    if planarity_constraints > 0
         @variable(model, 0 <= g[1:n_non_incident_edges, 0:7] <= 1, Bin)
     end
 
@@ -122,6 +114,8 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
         @constraint(model, z1[i] == x[i] + y[i])
         @constraint(model, z2[i] == x[i] - y[i])
     end
+
+
     # For each edge
     for i in 1:M
 
@@ -187,129 +181,128 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
         end
 
         const bM = max_canvas
-
         # Todo: Extract this into a macro
         if orig_dir == 0
             # direction == 7
             @constraint(model, z1[v] - z1[u] <= bM * (1 - a[i, 1]))
             @constraint(model, z1[v] - z1[u] >= -1 * bM * (1 - a[i, 1]))
-            @constraint(model, z2[v] - z2[u] >= -(bM + min_length) * (1 - a[i, 1]) + 2 * min_length)
+            @constraint(model, z2[v] - z2[u] >= -bM * (1 - a[i, 1]) + 2 * min_length)
 
             # direction == 0
             @constraint(model, y[v] - y[u] <= bM * (1 - a[i, 2]))
             @constraint(model, y[v] - y[u] >= -bM * (1 - a[i, 2]))
-            @constraint(model, x[v] - x[u] >= -1 * (bM + min_length) * (1 - a[i, 2]) + min_length)
+            @constraint(model, x[v] - x[u] >= -1 * bM * (1 - a[i, 2]) + min_length)
 
             # direction == 1
             @constraint(model, z2[v] - z2[u] <= bM * (1 - a[i, 3]))
             @constraint(model, z2[v] - z2[u] >= -1 * bM * (1 - a[i, 3]))
-            @constraint(model, z1[v] - z1[u] >= -1 * (bM + min_length) * (1 - a[i, 3]) + 2 * min_length)
+            @constraint(model, z1[v] - z1[u] >= -1 * bM * (1 - a[i, 3]) + 2 * min_length)
         elseif orig_dir == 1
             # direction == 0
             @constraint(model, y[v] - y[u] <= bM * (1 - a[i, 1]))
             @constraint(model, y[v] - y[u] >= -bM * (1 - a[i, 1]))
-            @constraint(model, x[v] - x[u] >= -(bM + min_length) * (1 - a[i, 1]) + min_length)
+            @constraint(model, x[v] - x[u] >= -bM * (1 - a[i, 1]) + min_length)
 
             # direction == 1
             @constraint(model, z2[v] - z2[u] <= 1 * bM * (1 - a[i, 2]))
             @constraint(model, z2[v] - z2[u] >= -1 * bM * (1 - a[i, 2]))
-            @constraint(model, z1[v] - z1[u] >= -1 * (bM + min_length) * (1 - a[i, 2]) + 2 * min_length)
+            @constraint(model, z1[v] - z1[u] >= -1 * bM * (1 - a[i, 2]) + 2 * min_length)
 
             # direction == 2
             @constraint(model, x[v] - x[u] <= bM * (1 - a[i, 3]))
             @constraint(model, x[v] - x[u] >= -bM * (1 - a[i, 3]))
-            @constraint(model, y[v] - y[u] >= -(bM + min_length) * (1 - a[i, 3]) + min_length)
+            @constraint(model, y[v] - y[u] >= -bM * (1 - a[i, 3]) + min_length)
         elseif orig_dir == 2
             # direction == 1
             @constraint(model, z2[v] - z2[u] <= 1 * bM * (1 - a[i, 1]))
             @constraint(model, z2[v] - z2[u] >= -1 * bM * (1 - a[i, 1]))
-            @constraint(model, z1[v] - z1[u] >= -1 * (bM + min_length) * (1 - a[i, 1]) + 2 * min_length)
+            @constraint(model, z1[v] - z1[u] >= -1 * bM * (1 - a[i, 1]) + 2 * min_length)
 
             # direction == 2
             @constraint(model, x[u] - x[v] <= bM * (1 - a[i, 2]))
             @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 2]))
-            @constraint(model, y[v] - y[u] >= -(bM + min_length) * (1 - a[i, 2]) + min_length)
+            @constraint(model, y[v] - y[u] >= -bM * (1 - a[i, 2]) + min_length)
 
             # direction == 3
             @constraint(model, z1[u] - z1[v] <= 1 * bM * (1 - a[i, 3]))
             @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 3]))
-            @constraint(model, z2[u] - z2[v] >= -1 * (bM + min_length) * (1 - a[i, 3]) + 2 * min_length)
+            @constraint(model, z2[u] - z2[v] >= -1 * bM * (1 - a[i, 3]) + 2 * min_length)
         elseif orig_dir == 3
             # direction == 2
             @constraint(model, x[u] - x[v] <= bM * (1 - a[i, 1]))
             @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 1]))
-            @constraint(model, y[v] - y[u] >= -(bM + min_length) * (1 - a[i, 1]) + min_length)
+            @constraint(model, y[v] - y[u] >= -bM * (1 - a[i, 1]) + min_length)
 
             # direction == 3
             @constraint(model, z1[u] - z1[v] <= 1 * bM * (1 - a[i, 2]))
             @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 2]))
-            @constraint(model, z2[u] - z2[v] >= -1 * (bM + min_length) * (1 - a[i, 2]) + 2 * min_length)
+            @constraint(model, z2[u] - z2[v] >= -1 * bM * (1 - a[i, 2]) + 2 * min_length)
 
             # direction == 4
             @constraint(model, y[u] - y[v] <= bM * (1 - a[i, 3]))
             @constraint(model, y[u] - y[v] >= -bM * (1 - a[i, 3]))
-            @constraint(model, x[u] - x[v] >= -(bM + min_length) * (1 - a[i, 3]) + min_length)
+            @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 3]) + min_length)
         elseif orig_dir == 4
             # direction == 3
             @constraint(model, z1[u] - z1[v] <= 1 * bM * (1 - a[i, 1]))
             @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 1]))
-            @constraint(model, z2[u] - z2[v] >= -1 * (bM + min_length) * (1 - a[i, 1]) + 2 * min_length)
+            @constraint(model, z2[u] - z2[v] >= -1 * bM * (1 - a[i, 1]) + 2 * min_length)
 
             # direction == 4
             @constraint(model, y[u] - y[v] <= bM * (1 - a[i, 2]))
             @constraint(model, y[u] - y[v] >= -bM * (1 - a[i, 2]))
-            @constraint(model, x[u] - x[v] >= -(bM + min_length) * (1 - a[i, 2]) + min_length)
+            @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 2]) + min_length)
 
             # direction == 5
             @constraint(model, z2[u] - z2[v] <= 1 * bM * (1 - a[i, 3]))
             @constraint(model, z2[u] - z2[v] >= -1 * bM * (1 - a[i, 3]))
-            @constraint(model, z1[u] - z1[v] >= -1 * (bM + min_length) * (1 - a[i, 3]) + 2 * min_length)
+            @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 3]) + 2 * min_length)
         elseif orig_dir == 5
 
             # direction == 4
             @constraint(model, y[u] - y[v] <= bM * (1 - a[i, 1]))
             @constraint(model, y[u] - y[v] >= -bM * (1 - a[i, 1]))
-            @constraint(model, x[u] - x[v] >= -(bM + min_length) * (1 - a[i, 1]) + min_length)
+            @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 1]) + min_length)
 
             # direction == 5
             @constraint(model, z2[u] - z2[v] <= 1 * bM * (1 - a[i, 2]))
             @constraint(model, z2[u] - z2[v] >= -1 * bM * (1 - a[i, 2]))
-            @constraint(model, z1[u] - z1[v] >= -1 * (bM + min_length) * (1 - a[i, 2]) + 2 * min_length)
+            @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 2]) + 2 * min_length)
 
             # direction == 6
             @constraint(model, x[u] - x[v] <= bM * (1 - a[i, 3]))
             @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 3]))
-            @constraint(model, y[u] - y[v] >= -(bM + min_length) * (1 - a[i, 3]) + min_length)
+            @constraint(model, y[u] - y[v] >= -1 * bM * (1 - a[i, 3]) + min_length)
         elseif orig_dir == 6
             # direction == 5
             @constraint(model, z2[u] - z2[v] <= 1 * bM * (1 - a[i, 1]))
             @constraint(model, z2[u] - z2[v] >= -1 * bM * (1 - a[i, 1]))
-            @constraint(model, z1[u] - z1[v] >= -1 * (bM + min_length) * (1 - a[i, 1]) + 2 * min_length)
+            @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 1]) + 2 * min_length)
 
             # direction == 6
             @constraint(model, x[u] - x[v] <= bM * (1 - a[i, 2]))
             @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 2]))
-            @constraint(model, y[u] - y[v] >= -(bM + min_length) * (1 - a[i, 2]) + min_length)
+            @constraint(model, y[u] - y[v] >= -1 * bM * (1 - a[i, 2]) + min_length)
 
             # direction == 7
             @constraint(model, z1[u] - z1[v] <= 1 * bM * (1 - a[i, 3]))
             @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 3]))
-            @constraint(model, z2[v] - z2[u] >= -1 * (bM + min_length) * (1 - a[i, 3]) + 2 * min_length)
+            @constraint(model, z2[v] - z2[u] >= -1 * bM * (1 - a[i, 3]) + 2 * min_length)
         elseif orig_dir == 7
             # direction == 6
             @constraint(model, x[u] - x[v] <= bM * (1 - a[i, 1]))
             @constraint(model, x[u] - x[v] >= -bM * (1 - a[i, 1]))
-            @constraint(model, y[u] - y[v] >= -(bM + min_length) * (1 - a[i, 1]) + min_length)
+            @constraint(model, y[u] - y[v] >= -1 * bM * (1 - a[i, 1]) + min_length)
 
             # direction == 7
             @constraint(model, z1[u] - z1[v] <= 1 * bM * (1 - a[i, 2]))
             @constraint(model, z1[u] - z1[v] >= -1 * bM * (1 - a[i, 2]))
-            @constraint(model, z2[v] - z2[u] >= -1 * (bM + min_length) * (1 - a[i, 2]) + 2 * min_length)
+            @constraint(model, z2[v] - z2[u] >= -1 * bM * (1 - a[i, 2]) + 2 * min_length)
 
             # direction == 0
             @constraint(model, y[u] - y[v] <= bM * (1 - a[i, 3]))
             @constraint(model, y[u] - y[v] >= -bM * (1 - a[i, 3]))
-            @constraint(model, x[v] - x[u] >= -(bM + min_length) * (1 - a[i, 3]) + min_length)
+            @constraint(model, x[v] - x[u] >= -1 * bM * (1 - a[i, 3]) + min_length)
         else
             error("Direction not between 0 and 7")
         end
@@ -323,7 +316,6 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
         const deg = out_degree(transit_map, station)
         const neighbors = get_neighbors(station)
         if deg >= 2 && length(neighbors) >= 2
-            #println(i, sort(neighbors, by = sort_node_by_direction(station_id)))
             const neighbor_indexes = map(get_station_index,
                                     sort(neighbors, by = sort_node_by_direction(station_id)))
             @constraint(model, sum(b[i, j] for j = 1:length(neighbors)) == 1)
@@ -341,14 +333,12 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
         end
     end
 
-    if planarity_constraints
+    # TODO: Generate this code to reduce duplication
+    if planarity_constraints == 1 # with callback
         # last step is to register a callback to preserve planarity
         function check_edge_spacing(cb)
             const bM2 = max_canvas + d_min
-            const x_val = getvalue(x)
-            const y_val = getvalue(y)
-            const z1_val = getvalue(z1)
-            const z2_val = getvalue(z2)
+
             #println("Enter callback")
             for i in 1:n_non_incident_edges
                 const t = non_indicent_edge_list[i]
@@ -358,28 +348,17 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
                 const v1 = get_station_index(e1.to.id)
                 const u2 = get_station_index(e2.from.id)
                 const v2 = get_station_index(e2.to.id)
-                if !(@check_pairs(x_val, u1, v1, u2, v2) ||
-                    @check_pairs(z1_val, u1, v1, u2, v2) ||
-                    @check_pairs(y_val, u1, v1, u2, v2) ||
-                    @check_pairs(z2_val, u1, v1, u2, v2) ||
+                if !(@check_pairs(x, u1, v1, u2, v2) ||
+                    @check_pairs(z1, u1, v1, u2, v2) ||
+                    @check_pairs(y, u1, v1, u2, v2) ||
+                    @check_pairs(z2, u1, v1, u2, v2) ||
 
-                    @check_pairs(z2_val, u2, v2, u1, v1) ||
-                    @check_pairs(x_val, u2, v2, u1, v1) ||
-                    @check_pairs(z1_val, u2, v2, u1, v1) ||
-                    @check_pairs(y_val, u2, v2, u1, v1))
+                    @check_pairs(z2, u2, v2, u1, v1) ||
+                    @check_pairs(x, u2, v2, u1, v1) ||
+                    @check_pairs(z1, u2, v2, u1, v1) ||
+                    @check_pairs(y, u2, v2, u1, v1))
+                    #println("Add constraints for edge", i)
                     # now we need to add a constraint that prevents this
-                    #println("Adding constraint for tuple ", t)
-                    #println(getvalue(g[i, 0:7]))
-                    #if sum(getvalue(g[i, 0:7])) > 0
-                    #    println("e1: ", getvalue(x[u1]), "/", getvalue(y[u1]), "->", getvalue(x[v1]), "/", getvalue(y[v1]))
-                    #    println("e2: ", getvalue(x[u2]), "/", getvalue(y[u2]), "->", getvalue(x[v2]), "/", getvalue(y[v2]))
-                    #    println(getvalue(x[u1]) - getvalue(x[u2]), "<=", bM2 * (1 - getvalue(g[i, 0])) -d_min)
-                    #    println(getvalue(x[u1]) - getvalue(x[v2]), "<=", bM2 * (1 - getvalue(g[i, 0])) -d_min)
-                    #    println(getvalue(x[v1]) - getvalue(x[u2]), "<=", bM2 * (1 - getvalue(g[i, 0])) -d_min)
-                    #    println(getvalue(x[v1]) - getvalue(x[v2]), "<=", bM2 * (1 - getvalue(g[i, 0])) -d_min)
-                    #end
-                    #printl("")
-                    # TODO: mehrfach add
                     @lazyconstraint(cb, sum(g[i, d] for d = 0:7) >= 1)
 
                     # direction 0
@@ -429,11 +408,73 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph, planarity_cons
                     @lazyconstraint(cb, z2[u1] - z2[v2] <= bM2 * (1 - g[i, 7]) - d_min)
                     @lazyconstraint(cb, z2[v1] - z2[u2] <= bM2 * (1 - g[i, 7]) - d_min)
                     @lazyconstraint(cb, z2[v1] - z2[v2] <= bM2 * (1 - g[i, 7]) - d_min)
-
                 end
             end
         end
         addlazycallback(model, check_edge_spacing)
+    elseif planarity_constraints == 2 # no callbacks
+        const bM2 = max_canvas + d_min
+
+        #println("Enter callback")
+        for i in 1:n_non_incident_edges
+            const t = non_indicent_edge_list[i]
+            const e1 = t[1]
+            const e2 = t[2]
+            const u1 = get_station_index(e1.from.id)
+            const v1 = get_station_index(e1.to.id)
+            const u2 = get_station_index(e2.from.id)
+            const v2 = get_station_index(e2.to.id)
+            @constraint(model, sum(g[i, d] for d = 0:7) >= 1)
+
+            # direction 0
+            @constraint(model, x[u1] - x[u2] <= bM2 * (1 - g[i, 0]) - d_min)
+            @constraint(model, x[u1] - x[v2] <= bM2 * (1 - g[i, 0]) - d_min)
+            @constraint(model, x[v1] - x[u2] <= bM2 * (1 - g[i, 0]) - d_min)
+            @constraint(model, x[v1] - x[v2] <= bM2 * (1 - g[i, 0]) - d_min)
+
+            # direction 1
+            @constraint(model, z1[u1] - z1[u2] <= bM2 * (1 - g[i, 1]) - d_min)
+            @constraint(model, z1[u1] - z1[v2] <= bM2 * (1 - g[i, 1]) - d_min)
+            @constraint(model, z1[v1] - z1[u2] <= bM2 * (1 - g[i, 1]) - d_min)
+            @constraint(model, z1[v1] - z1[v2] <= bM2 * (1 - g[i, 1]) - d_min)
+
+            # direction 2
+            @constraint(model, y[u1] - y[u2] <= bM2 * (1 - g[i, 2]) - d_min)
+            @constraint(model, y[u1] - y[v2] <= bM2 * (1 - g[i, 2]) - d_min)
+            @constraint(model, y[v1] - y[u2] <= bM2 * (1 - g[i, 2]) - d_min)
+            @constraint(model, y[v1] - y[v2] <= bM2 * (1 - g[i, 2]) - d_min)
+
+            # direction 3
+            @constraint(model, z2[u2] - z2[u1] <= bM2 * (1 - g[i, 3]) - d_min)
+            @constraint(model, z2[u2] - z2[v1] <= bM2 * (1 - g[i, 3]) - d_min)
+            @constraint(model, z2[v2] - z2[u1] <= bM2 * (1 - g[i, 3]) - d_min)
+            @constraint(model, z2[v2] - z2[v1] <= bM2 * (1 - g[i, 3]) - d_min)
+
+            # direction 4
+            @constraint(model, x[u2] - x[u1] <= bM2 * (1 - g[i, 4]) - d_min)
+            @constraint(model, x[u2] - x[v1] <= bM2 * (1 - g[i, 4]) - d_min)
+            @constraint(model, x[v2] - x[u1] <= bM2 * (1 - g[i, 4]) - d_min)
+            @constraint(model, x[v2] - x[v1] <= bM2 * (1 - g[i, 4]) - d_min)
+
+            # direction 5
+            @constraint(model, z1[u2] - z1[u1] <= bM2 * (1 - g[i, 5]) - d_min)
+            @constraint(model, z1[u2] - z1[v1] <= bM2 * (1 - g[i, 5]) - d_min)
+            @constraint(model, z1[v2] - z1[u1] <= bM2 * (1 - g[i, 5]) - d_min)
+            @constraint(model, z1[v2] - z1[v1] <= bM2 * (1 - g[i, 5]) - d_min)
+
+            # direction 6
+            @constraint(model, y[u2] - y[u1] <= bM2 * (1 - g[i, 6]) - d_min)
+            @constraint(model, y[u2] - y[v1] <= bM2 * (1 - g[i, 6]) - d_min)
+            @constraint(model, y[v2] - y[u1] <= bM2 * (1 - g[i, 6]) - d_min)
+            @constraint(model, y[v2] - y[v1] <= bM2 * (1 - g[i, 6]) - d_min)
+
+            # direction 7
+            @constraint(model, z2[u1] - z2[u2] <= bM2 * (1 - g[i, 7]) - d_min)
+            @constraint(model, z2[u1] - z2[v2] <= bM2 * (1 - g[i, 7]) - d_min)
+            @constraint(model, z2[v1] - z2[u2] <= bM2 * (1 - g[i, 7]) - d_min)
+            @constraint(model, z2[v1] - z2[v2] <= bM2 * (1 - g[i, 7]) - d_min)
+
+        end
     end
 
     # bend cost constraints

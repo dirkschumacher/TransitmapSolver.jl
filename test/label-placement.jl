@@ -1,10 +1,10 @@
-coord1 = GeoCoordinate(1, 2)
-coord2 = GeoCoordinate(1, 3)
+coord1 = EuclideanCoordinate(1, 2)
+coord2 = EuclideanCoordinate(1, 3)
 
-station1 = GeoStation(1, coord1, "test_2", false)
-station2 = GeoStation(2, coord2, "test", false)
-label_node3 = GeoStation(3, coord2, "test", true)
-label_node4 = GeoStation(4, coord2, "test", true)
+station1 = EuclideanStation(1, coord1, "test_2", false)
+station2 = EuclideanStation(2, coord2, "test", false)
+label_node3 = EuclideanStation(3, coord2, "test", true)
+label_node4 = EuclideanStation(4, coord2, "test", true)
 
 line1 = Line("S1")
 line2 = Line("DummyEdge2")

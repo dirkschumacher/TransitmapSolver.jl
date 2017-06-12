@@ -1,6 +1,7 @@
 module TransitmapSolver
 using JuMP
 import MathProgBase
+using DataStructures
 
 include("types.jl")
 include("transitmap.jl")
@@ -9,23 +10,11 @@ include("optimze.jl")
 
 export Station
 export Edge
-export GeoCoordinate
-export GeoStation
+export EuclideanCoordinate
+export EuclideanStation
 export Line
-export GeoTransitMap
 export InputGraph
 export ProcessedEdge
 export optimize
-
-# TODO: write a macro to export enum
-#export Direction
-#export East
-#export West
-#export North
-#export South
-#export SouthEast
-#export SouthWest
-#export NorthEast
-#export NorthWest
 
 end # module

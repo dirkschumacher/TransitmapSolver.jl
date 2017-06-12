@@ -5,7 +5,10 @@ using GLPKMathProgInterface
 
 tests = [
     "model1",
-    "label-placement"]
+    "label-placement",
+    "model2",
+    "model-faces",
+    ]
 
 println("Running tests:")
 
