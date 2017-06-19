@@ -74,14 +74,15 @@ function edge_faces(graph::TransitMap)
     faces
 end
 
+function angle_deg(edge)
+    # as on https://stackoverflow.com/a/9970297/2798441
+    # by John Ericksen https://stackoverflow.com/users/654187/john-ericksen
+    rad2deg(atan2(edge.from.coordinate.y - edge.to.coordinate.y,
+            edge.from.coordinate.x - edge.to.coordinate.x)) % 360
+end
+
 # sorts all outbound nodes counter-clockwise
 function sorted_outbound_edges(graph::TransitMap, node::EuclideanStation)
-    function angle_deg(edge)
-        # as on https://stackoverflow.com/a/9970297/2798441
-        # by John Ericksen https://stackoverflow.com/users/654187/john-ericksen
-        rad2deg(atan2(edge.from.coordinate.y - edge.to.coordinate.y,
-                edge.from.coordinate.x - edge.to.coordinate.x)) % 360
-    end
     sort(outbound_edges(graph, node), by = angle_deg)
 end
 
