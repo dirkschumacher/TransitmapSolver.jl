@@ -96,7 +96,7 @@ lines = unique(map(x -> x.line, edges))
 
 
 transit_map = InputGraph(nodes, edges, lines)
-solver1 = CbcSolver(logLevel = 0, threads = 3, seconds = 60 * 5) # all heuristics on
+solver1 = CbcSolver(logLevel = 1, threads = 3, seconds = 60 * 5)
 result = optimize(solver1,
                     transit_map,
                     0)
