@@ -1,4 +1,3 @@
-using DataFrames
 using GLPKMathProgInterface
 using Cbc
 using MathProgBase
@@ -48,7 +47,6 @@ function readEdges(path::String, nodes, lines)
             line = first(filter(x -> x.id == r["metadata"]["line"], lines))
             angle = angle_deg(Edge(src, target, Line(r["metadata"]["line"])))
             dir = classify_direction_sector(angle)
-            println(src.label, "->", target.label, " - ", dir, "; ", angle)
             res = ProcessedEdge(src, target, line, dir, 1, false)
             push!(result, res)
         end
@@ -78,7 +76,7 @@ lines = unique(map(x -> x.line, edges))
 
 transit_map = InputGraph(nodes, edges, lines)
 transit_map = reduce_transitmap(transit_map)
-solver1 = CbcSolver(logLevel = 0, threads = 3, seconds = 60 * 5)
+solver1 = CbcSolver(logLevel = 1, threads = 3, seconds = 60 * 5)
 result = optimize(solver1,
                     transit_map,
                     0)
