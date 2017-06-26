@@ -7,7 +7,6 @@ module TransitmapSolver
     include("transitmap.jl")
     include("mipmodel.jl")
     include("optimze.jl")
-    include("parallel-edges.jl")
 
     export Station
     export Edge
@@ -23,4 +22,6 @@ module TransitmapSolver
     export optimize
     export TransitMapLayout
     export angle_deg
+    export reduce_transitmap
+    export classify_direction_sector
 end # module

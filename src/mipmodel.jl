@@ -115,7 +115,6 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph,
         @constraint(model, z2[i] == x[i] - y[i])
     end
 
-
     # For each edge
     for i in 1:M
 

@@ -19,6 +19,11 @@ function degree(transit_map::TransitMap, station::Station)
     length(filter(is_connected, edges(transit_map)))
 end
 
+function inbound_edges(transit_map::TransitMap, station::Station)
+    is_connected = x -> x.to == station && !x.is_single_label_edge
+    filter(is_connected, edges(transit_map))
+end
+
 function outbound_edges(transit_map::TransitMap, station::Station)
     is_connected = x -> x.from == station && !x.is_single_label_edge
     filter(is_connected, edges(transit_map))
@@ -77,8 +82,13 @@ end
 function angle_deg(edge)
     # as on https://stackoverflow.com/a/9970297/2798441
     # by John Ericksen https://stackoverflow.com/users/654187/john-ericksen
-    rad2deg(atan2(edge.from.coordinate.y - edge.to.coordinate.y,
-            edge.from.coordinate.x - edge.to.coordinate.x)) % 360
+    res = rad2deg(atan2(edge.to.coordinate.y - edge.from.coordinate.y,
+            edge.to.coordinate.x - edge.from.coordinate.x))
+    if res < 0
+        res + 360
+    else
+        res
+    end
 end
 
 # sorts all outbound nodes counter-clockwise
@@ -144,3 +154,78 @@ function non_incident_edges(transit_map::TransitMap, faces::Set{Set{GenericEdge}
     non_incident_edges
 end
 
+function find_deg2_sequences(transit_map::TransitMap, start_edge)
+    paths = Set()
+    const line = start_edge.line
+    current_edge = start_edge
+    current_path = Vector{ProcessedEdge}([current_edge])
+    while true
+        const out_edges = filter(x -> x.line == line,
+                                outbound_edges(transit_map, current_edge.to))
+        is_deg2edge = degree(transit_map, current_edge.to) == 2
+        if is_deg2edge
+            is_deg2edge = length(out_edges) == 1
+        end
+        if is_deg2edge
+            current_edge = first(out_edges)
+            push!(current_path, current_edge)
+        else
+            # path has ended
+            if length(current_path) > 2
+                push!(paths, current_path)
+            end
+            const new_paths = map(x -> find_deg2_sequences(transit_map, x), out_edges)
+            for np in new_paths
+                union!(paths, np)
+            end
+            break
+        end
+    end
+    paths
+end
+
+function classify_direction_sector(direction_angle::Real)
+    if direction_angle > 90 - 22.5 && direction_angle <= 90 + 22.5
+        0
+    elseif direction_angle > 135 - 22.5 && direction_angle <= 135 + 22.5
+        7
+    elseif direction_angle > 180 - 22.5 && direction_angle <= 180 + 22.5
+        6
+    elseif direction_angle > 225 - 22.5 && direction_angle <= 225 + 22.5
+        5
+    elseif direction_angle > 270 - 22.5 && direction_angle <= 270 + 22.5
+        4
+    elseif direction_angle > 315 - 22.5 && direction_angle <= 315 + 22.5
+        3
+    elseif direction_angle > 360 - 22.5 || direction_angle <= 22.5
+        2
+    elseif direction_angle > 45 - 22.5 && direction_angle <= 45 + 22.5
+        1
+    else
+        error("Should not happen")
+    end
+end
+
+function reduce_transitmap(transit_map::InputGraph)
+    new_transit_map = transit_map
+    # for each line we remove degree 2 edges
+    for line in transit_map.lines
+        const filter_fun = x -> length(inbound_edges(new_transit_map, x.from)) == 0 && x.line == line
+        const start_edge = first(filter(filter_fun, edges(new_transit_map)))
+        const deg2seqs = find_deg2_sequences(new_transit_map, start_edge)
+        for seq in deg2seqs
+            const first_edge = first(seq)
+            const last_edge = last(seq)
+            const from = first_edge.from
+            const to = last_edge.to
+            const dir = classify_direction_sector(angle_deg(Edge(from, to, line)))
+            const min_length = sum(map(x -> x.min_length, seq))
+            const new_edge = ProcessedEdge(from, last_edge.to, line, dir, min_length, false)
+            new_edges = filter(x -> !(x in seq), edges(new_transit_map))
+            push!(new_edges, new_edge)
+            const new_nodes = unique(map(x -> x.from, new_edges) ∪ map(x -> x.to, new_edges))
+            new_transit_map = InputGraph(new_nodes, new_edges, transit_map.lines)
+        end
+    end
+    new_transit_map
+end

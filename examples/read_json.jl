@@ -36,29 +36,6 @@ function readNodes(path::String)
     result
 end
 
-
-function classify_direction_sector(direction_angle::Real)
-    if direction_angle > 90 - 22.5 && direction_angle <= 90 + 22.5
-        0
-    elseif direction_angle > 135 - 22.5 && direction_angle <= 135 + 22.5
-        7
-    elseif direction_angle > 180 - 22.5 && direction_angle <= 180 + 22.5
-        6
-    elseif direction_angle > 225 - 22.5 && direction_angle <= 225 + 22.5
-        5
-    elseif direction_angle > 270 - 22.5 && direction_angle <= 270 + 22.5
-        4
-    elseif direction_angle > 315 - 22.5 && direction_angle <= 315 + 22.5
-        3
-    elseif direction_angle > 360 - 22.5 || direction_angle <= 22.5
-        2
-    elseif direction_angle > 45 - 22.5 && direction_angle <= 45 + 22.5
-        1
-    else
-        error("Should not happen")
-    end
-end
-
 function readEdges(path::String, nodes, lines)
     result = []
     open(path, "r") do f
@@ -69,8 +46,10 @@ function readEdges(path::String, nodes, lines)
             src = first(filter(x -> x.id == src_id, nodes))
             target = first(filter(x -> x.id == target_id, nodes))
             line = first(filter(x -> x.id == r["metadata"]["line"], lines))
-            dir = classify_direction_sector(angle_deg(Edge(src, target, Line(r["metadata"]["line"]))))
-            res = ProcessedEdge(src, target, line, 1, dir, false)
+            angle = angle_deg(Edge(src, target, Line(r["metadata"]["line"])))
+            dir = classify_direction_sector(angle)
+            println(src.label, "->", target.label, " - ", dir, "; ", angle)
+            res = ProcessedEdge(src, target, line, dir, 1, false)
             push!(result, res)
         end
     end
@@ -91,15 +70,45 @@ end
 lines = readLines("edges.ndjson")
 nodes = readNodes("nodes.ndjson")
 edges = readEdges("edges.ndjson", nodes, lines)
+#edges = filter(x -> x.line.id in ["U6", "U7", "U8", "U9", "U1", "U2"], edges)
+#println(map(x -> [x.line.id, x.from.id, x.to.id], edges))
 nodes = unique(map(x -> x.from, edges) ∪ map(x -> x.to, edges))
 lines = unique(map(x -> x.line, edges))
 
 
 transit_map = InputGraph(nodes, edges, lines)
-solver1 = CbcSolver(logLevel = 1, threads = 3, seconds = 60 * 5)
+transit_map = reduce_transitmap(transit_map)
+solver1 = CbcSolver(logLevel = 0, threads = 3, seconds = 60 * 5)
 result = optimize(solver1,
                     transit_map,
                     0)
 
-write(STDOUT, JSON.json(result))
+# convert to json grapg format
 
+type ExportNodeMetaData
+    coordinates::EuclideanCoordinate
+end
+type ExportNode
+    id::String
+    label::String
+    metadata::ExportNodeMetaData
+end
+type ExportEdgeMetaData
+    line::String
+end
+type ExportEdge
+    from::String
+    to::String
+    metadata::ExportEdgeMetaData
+end
+type ExportGraph
+    nodes::Set{ExportNode}
+    edges::Set{ExportEdge}
+end
+
+nodes = Set{ExportNode}(map(x -> ExportNode(string(x.id), x.label, ExportNodeMetaData(x.coordinate)), result.stations))
+convert_edge = x -> ExportEdge(string(x.from.id), string(x.to.id), ExportEdgeMetaData(x.line.id))
+edges = Set{ExportEdge}(map(convert_edge, result.edges))
+
+write("export.json", JSON.json(ExportGraph(nodes, edges)))
+#write(STDOUT, JSON.json(ExportGraph(nodes, edges)))

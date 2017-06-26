@@ -8,6 +8,7 @@ tests = [
     "label-placement",
     "model2",
     "model-faces",
+    "reduce-map"
     ]
 
 println("Running tests:")
