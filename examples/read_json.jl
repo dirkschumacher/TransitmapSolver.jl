@@ -48,7 +48,9 @@ function readEdges(path::String, nodes, lines)
             angle = angle_deg(Edge(src, target, Line(r["metadata"]["line"])))
             dir = classify_direction_sector(angle)
             res = ProcessedEdge(src, target, line, dir, 1, false)
-            push!(result, res)
+            if length(filter(x -> x.from == src && x.to == target, result)) == 0
+                push!(result, res)
+            end
         end
     end
     result
@@ -68,18 +70,19 @@ end
 lines = readLines("edges.ndjson")
 nodes = readNodes("nodes.ndjson")
 edges = readEdges("edges.ndjson", nodes, lines)
-#edges = filter(x -> x.line.id in ["U6", "U7", "U8", "U9", "U1", "U2"], edges)
+#edges = filter(x -> x.line.id in ["U8", "U6", "U9"], edges)
 #println(map(x -> [x.line.id, x.from.id, x.to.id], edges))
 nodes = unique(map(x -> x.from, edges) ∪ map(x -> x.to, edges))
 lines = unique(map(x -> x.line, edges))
 
 
 transit_map = InputGraph(nodes, edges, lines)
-transit_map = reduce_transitmap(transit_map)
-solver1 = CbcSolver(logLevel = 1, threads = 3, seconds = 60 * 5)
-result = optimize(solver1,
-                    transit_map,
-                    0)
+reduced_transit_map = reduce_transitmap(transit_map)
+solver1 = CbcSolver(logLevel = 1, threads = 3, seconds = 60 * 10)
+result = optimize(solver1, reduced_transit_map, 0)
+
+# restore the original network
+result = restore_transitmap(result, transit_map)
 
 # convert to json grapg format
 

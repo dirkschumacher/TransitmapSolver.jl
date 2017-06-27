@@ -24,4 +24,5 @@ module TransitmapSolver
     export angle_deg
     export reduce_transitmap
     export classify_direction_sector
+    export restore_transitmap
 end # module

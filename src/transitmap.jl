@@ -206,6 +206,8 @@ function classify_direction_sector(direction_angle::Real)
     end
 end
 
+# reduce the network so it is easier to solve
+# reduces all sequences of deg. 2 nodes to a single, longer edge
 function reduce_transitmap(transit_map::InputGraph)
     new_transit_map = transit_map
     # for each line we remove degree 2 edges
@@ -228,4 +230,71 @@ function reduce_transitmap(transit_map::InputGraph)
         end
     end
     new_transit_map
+end
+
+# restores reduced nodes
+function restore_transitmap(layout::TransitMapLayout, original_map::InputGraph)
+    # find edges that are not part of the original layout
+    # sequentially add those edges
+    # It was late ... TODO: refactor
+    nodes = layout.stations
+    const layout_node_ids = Set(map(x -> x.id, nodes))
+    node_ids = layout_node_ids # remember what nodes we already added
+    edges = layout.edges
+    missing_edges = filter(x -> length(filter(y -> y.from.id == x.from.id &&
+                                                y.to.id == x.to.id && y.line.id == x.line.id, edges)) == 0, original_map.edges)
+    while length(missing_edges) > 0
+        # find an edge that starts at a layout node
+        const edge = first(filter(x -> x.from.id in layout_node_ids, missing_edges))
+
+        # now find the path to a known edge along the same line
+        path = [edge.to]
+        current_node = edge.to
+        node_found = false
+        rm_edges = Set([edge])
+        while !node_found
+            const next_edges = filter(x -> x.line.id == edge.line.id &&
+                                        x.from.id == current_node.id, missing_edges)
+            @assert length(next_edges) <= 1
+            if length(next_edges) > 0
+                current_node = first(next_edges).to
+                push!(rm_edges, first(next_edges))
+                if !(current_node.id in layout_node_ids)
+                    push!(path, current_node)
+                else
+                    node_found = true
+                end
+            else
+                node_found = true
+            end
+        end
+        filter!(x -> !(x in rm_edges), missing_edges)
+        const missing_nodes = filter(x -> !(x in node_ids), path)
+
+        # now add the missing nodes and edges in equi distance
+        const reduced_edge = first(filter(x -> x.from.id == edge.from.id && x.line.id == edge.line.id, layout.edges))
+        start_coord = reduced_edge.from.coordinate
+        end_coord = reduced_edge.to.coordinate
+        edge_dist = [end_coord.x - start_coord.x, end_coord.y - start_coord.y] ./ (length(path) + 1)
+        i = 1
+        last_station = reduced_edge.from
+        for new_node in path
+            if new_node.id in node_ids
+                new_node = first(filter(x -> x.id == new_node.id, nodes))
+            else
+                new_node.coordinate = EuclideanCoordinate(start_coord.x + edge_dist[1] * i,
+                                            start_coord.y + edge_dist[2] * i)
+                push!(nodes, new_node)
+                push!(node_ids, new_node.id)
+            end
+            new_edge = Edge(last_station, new_node, edge.line)
+            last_station = new_node
+            push!(edges, new_edge)
+            i = i + 1
+        end
+        filter!(x -> x != reduced_edge, edges)
+        # now add the final edge
+        push!(edges, Edge(last_station, reduced_edge.to, edge.line))
+    end
+    TransitMapLayout(nodes, edges, layout.lines, layout.faces)
 end
