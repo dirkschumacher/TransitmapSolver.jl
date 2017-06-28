@@ -6,12 +6,12 @@ function optimize(solver::MathProgBase.SolverInterface.AbstractMathProgSolver,
     const faces = edge_faces(input_graph)
     model = Model(solver = solver)
     const variables = build_model!(model, input_graph, faces, planarity_constraints)
-    solve(model)
+    status = solve(model)
     const x_val = getvalue(variables.x)
     const y_val = getvalue(variables.y)
     function map_station(i)
         const station = station_list[i]
-        const coord = EuclideanCoordinate(x_val[i], y_val[i])
+        const coord = EuclideanCoordinate(round(x_val[i], 6), round(y_val[i], 6))
         EuclideanStation(station.id, coord, station.label, station.is_dummy)
     end
     const euclidian_stations = map(map_station, 1:nstations(input_graph))

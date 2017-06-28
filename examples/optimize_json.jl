@@ -67,9 +67,18 @@ function readLines(path::String)
     map(x -> Line(x), unique(result))
 end
 
-lines = readLines("edges.ndjson")
-nodes = readNodes("nodes.ndjson")
-edges = readEdges("edges.ndjson", nodes, lines)
+arg_len = length(ARGS)
+if arg_len != 4
+    write(STDERR, "Please supply three arguments: <nodes.ndjson> <edges.ndjson> <3::number of threads> <300::max time for the solver in seconds>")
+    exit()
+end
+nodes_path = ARGS[1]
+edges_path = ARGS[2]
+no_threads = parse(Int64, ARGS[3])
+max_time = parse(Int64, ARGS[4])
+lines = readLines(edges_path)
+nodes = readNodes(nodes_path)
+edges = readEdges(edges_path, nodes, lines)
 #edges = filter(x -> x.line.id in ["U8", "U6", "U9"], edges)
 #println(map(x -> [x.line.id, x.from.id, x.to.id], edges))
 nodes = unique(map(x -> x.from, edges) ∪ map(x -> x.to, edges))
@@ -78,7 +87,7 @@ lines = unique(map(x -> x.line, edges))
 
 transit_map = InputGraph(nodes, edges, lines)
 reduced_transit_map = reduce_transitmap(transit_map)
-solver1 = CbcSolver(logLevel = 1, threads = 3, seconds = 60 * 10)
+solver1 = CbcSolver(logLevel = 0, threads = no_threads, seconds = max_time)
 result = optimize(solver1, reduced_transit_map, 0)
 
 # restore the original network
@@ -111,5 +120,5 @@ nodes = Set{ExportNode}(map(x -> ExportNode(string(x.id), x.label, ExportNodeMet
 convert_edge = x -> ExportEdge(string(x.from.id), string(x.to.id), ExportEdgeMetaData(x.line.id))
 edges = Set{ExportEdge}(map(convert_edge, result.edges))
 
-write("export.json", JSON.json(ExportGraph(nodes, edges)))
-#write(STDOUT, JSON.json(ExportGraph(nodes, edges)))
+#write("export.json", JSON.json(ExportGraph(nodes, edges)))
+write(STDOUT, JSON.json(ExportGraph(nodes, edges)))
