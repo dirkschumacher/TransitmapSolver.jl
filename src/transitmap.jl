@@ -213,7 +213,6 @@ function reduce_transitmap(transit_map::InputGraph)
     new_transit_map = transit_map
     # for each line we remove degree 2 edges
     for line in transit_map.lines
-        println(line.id)
         const filter_fun = x -> length(inbound_edges(new_transit_map, x.from)) == 0 && x.line == line
         start_edges = filter(filter_fun, edges(new_transit_map))
         if length(start_edges) == 0
