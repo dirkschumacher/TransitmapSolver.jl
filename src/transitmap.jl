@@ -154,13 +154,13 @@ function non_incident_edges(transit_map::TransitMap, faces::Set{Set{GenericEdge}
     non_incident_edges
 end
 
-function find_deg2_sequences(transit_map::TransitMap, start_edge)
+function find_deg2_sequences(transit_map::TransitMap, start_edge::ProcessedEdge, visited_edges::Set{ProcessedEdge})
     paths = Set()
     const line = start_edge.line
     current_edge = start_edge
     current_path = Vector{ProcessedEdge}([current_edge])
     while true
-        const out_edges = filter(x -> x.line == line,
+        const out_edges = filter(x -> x.line == line && !(x in visited_edges),
                                 outbound_edges(transit_map, current_edge.to))
         is_deg2edge = degree(transit_map, current_edge.to) == 2
         if is_deg2edge
@@ -174,7 +174,8 @@ function find_deg2_sequences(transit_map::TransitMap, start_edge)
             if length(current_path) > 2
                 push!(paths, current_path)
             end
-            const new_paths = map(x -> find_deg2_sequences(transit_map, x), out_edges)
+            visited_edges = union(visited_edges, Set(current_path))
+            const new_paths = map(x -> find_deg2_sequences(transit_map, x, visited_edges), out_edges)
             for np in new_paths
                 union!(paths, np)
             end
@@ -212,9 +213,19 @@ function reduce_transitmap(transit_map::InputGraph)
     new_transit_map = transit_map
     # for each line we remove degree 2 edges
     for line in transit_map.lines
+        println(line.id)
         const filter_fun = x -> length(inbound_edges(new_transit_map, x.from)) == 0 && x.line == line
-        const start_edge = first(filter(filter_fun, edges(new_transit_map)))
-        const deg2seqs = find_deg2_sequences(new_transit_map, start_edge)
+        start_edges = filter(filter_fun, edges(new_transit_map))
+        if length(start_edges) == 0
+            # we have a cycle
+            start_edges = filter(x -> x.line == line, edges(new_transit_map))
+            if length(start_edges) == 0
+                println(STDERR, "Line ", line.id, " does not have any edges.")
+                exit()
+            end
+        end
+        const start_edge = first(start_edges)
+        const deg2seqs = find_deg2_sequences(new_transit_map, start_edge, Set{ProcessedEdge}([]))
         for seq in deg2seqs
             const first_edge = first(seq)
             const last_edge = last(seq)
