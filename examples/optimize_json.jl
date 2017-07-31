@@ -107,8 +107,8 @@ type ExportEdgeMetaData
     line::String
 end
 type ExportEdge
-    from::String
-    to::String
+    source::String
+    target::String
     metadata::ExportEdgeMetaData
 end
 type ExportGraph
