@@ -18,8 +18,8 @@ type EuclideanCoordinate <: Coordinate
     y::Real
 end
 
-typealias GeoStation Station{GeoCoordinate}
-typealias EuclideanStation Station{EuclideanCoordinate}
+const GeoStation = Station{GeoCoordinate}
+const EuclideanStation = Station{EuclideanCoordinate}
 
 type Line
     id::String
@@ -33,8 +33,8 @@ type Edge{TS} <: GenericEdge{TS}
     line::Line
 end
 
-typealias GeoEdge Edge{GeoStation}
-typealias EuclideanEdge Edge{EuclideanStation}
+const GeoEdge = Edge{GeoStation}
+const EuclideanEdge = Edge{EuclideanStation}
 
 # TODO: How to make sure that station and edges refer to the same station type?
 type TransitMap{TS<:Station, TE<:GenericEdge}
@@ -44,7 +44,7 @@ type TransitMap{TS<:Station, TE<:GenericEdge}
 end
 
 #@enum Direction North=2 NorthEast=1 East=0 SouthEast=7 South=6 SouthWest=5 West=4 NorthWest=3
-typealias Direction Int
+const Direction = Int
 
 type ProcessedEdge{TS} <: GenericEdge{TS}
     from::TS
@@ -55,9 +55,9 @@ type ProcessedEdge{TS} <: GenericEdge{TS}
     is_single_label_edge::Bool
 end
 
-typealias GeoTransitMap TransitMap{GeoStation, GeoEdge}
+const GeoTransitMap = TransitMap{GeoStation, GeoEdge}
 
-typealias InputGraph TransitMap{EuclideanStation, ProcessedEdge{EuclideanStation}}
+const InputGraph = TransitMap{EuclideanStation, ProcessedEdge{EuclideanStation}}
 
 # output
 
