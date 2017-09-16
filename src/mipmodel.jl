@@ -16,7 +16,12 @@ macro check_pairs(vals, a, b, c, d)
 end
 
 function build_model!(model::JuMP.Model, transit_map::InputGraph,
-                        faces::Set{Set{GenericEdge}}, planarity_constraints::Integer = 0)
+                        faces::Set{Set{GenericEdge}},
+                        planarity_constraints::Integer = 0,
+                        elen_factor::Integer = 3,
+                        bc_factor::Integer = 3,
+                        rpos_factor::Integer = 1
+                        )
 
     # model parameters
     const station_list = stations(transit_map)
@@ -103,9 +108,9 @@ function build_model!(model::JuMP.Model, transit_map::InputGraph,
     end
 
     # The objective is a weighted sum that needs to be minimized
-    @objective(model, Min, 3 * sum(elen[i] for i = 1:M) +
-                      3 * sum(bc[i] for i = 1:n_incident_edges) +
-                      1 * sum(rpos[i] for i = 1:M))
+    @objective(model, Min, elen_factor * sum(elen[i] for i = 1:M) +
+                      bc_factor * sum(bc[i] for i = 1:n_incident_edges) +
+                      rpos_factor * sum(rpos[i] for i = 1:M))
 
     # first some general constraints to model the relationship with
     # xy and z variables

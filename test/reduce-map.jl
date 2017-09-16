@@ -30,15 +30,16 @@ e5 = ProcessedEdge(s6, s7, line2, 0, 1, false)
 e6 = ProcessedEdge(s7, s4, line2, 0, 1, false)
 e7 = ProcessedEdge(s4, s8, line2, 0, 1, false)
 e8 = ProcessedEdge(s8, s9, line2, 0, 1, false)
+e9 = ProcessedEdge(s9, s5, line2, 0, 1, false)
 transit_map = InputGraph([s1, s2, s3, s4, s5,
                           s6, s7, s8, s9],
     [e1, e2, e3, e4,
-     e5, e6, e7, e8],
+     e5, e6, e7, e8, e9],
     [line1, line2])
 
 
 reduced_map = reduce_transitmap(transit_map)
 
 @test length(reduced_map.stations) == 4
-@test length(reduced_map.edges) == 3
+@test length(reduced_map.edges) == 4
 
