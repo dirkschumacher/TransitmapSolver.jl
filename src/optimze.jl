@@ -1,11 +1,15 @@
 function optimize(solver::MathProgBase.SolverInterface.AbstractMathProgSolver,
-                    transit_map::InputGraph, planarity_constraints::Integer)
+                    transit_map::InputGraph, planarity_constraints::Integer,
+                    elen_factor::Integer = 3,
+                    bc_factor::Integer = 3,
+                    rpos_factor::Integer = 1)
     const input_graph = transit_map
     const station_list = stations(input_graph)
     const edge_list = edges(input_graph)
     const faces = edge_faces(input_graph)
     model = Model(solver = solver)
-    const variables = build_model!(model, input_graph, faces, planarity_constraints)
+    const variables = build_model!(model, input_graph, faces, planarity_constraints,
+                                    elen_factor, elen_factor, rpos_factor)
     status = solve(model)
     const x_val = getvalue(variables.x)
     const y_val = getvalue(variables.y)
